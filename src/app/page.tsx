@@ -220,6 +220,52 @@ export default function Home() {
       });
   };
 
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen px-4 py-10 sm:px-8 md:py-16">
+        <main className="mx-auto flex max-w-5xl flex-col gap-8">
+          <AuthToolbar
+            user={null}
+            isAuthenticated={false}
+            providers={providerAvailability}
+          />
+          <Hero />
+          <section className="glass-panel grid gap-6 p-8 md:grid-cols-2">
+            <div className="space-y-4">
+              <p className="text-xs uppercase tracking-[0.35em] text-slate-400">
+                community only
+              </p>
+              <h2 className="text-3xl font-semibold text-white">
+                招待制タイムライン
+              </h2>
+              <p className="text-slate-300">
+                ここは AI を日常的に使い倒す開発者のための脳内ダンプ。プロダクトの進捗や試行錯誤を気兼ねなく共有するため、ログインしたメンバーだけが投稿とタイムラインを閲覧できます。
+              </p>
+              <ul className="list-disc space-y-2 pl-4 text-sm text-slate-400">
+                <li>GitHub / Google 認証で本人確認</li>
+                <li>投稿は Supabase に暗号化保存</li>
+                <li>タグ・リアクション・インサイトもログイン後に解放</li>
+              </ul>
+              <SignInButtons providers={providerAvailability} />
+            </div>
+            <div className="rounded-2xl border border-white/5 bg-white/5 p-6 text-sm text-slate-300">
+              <p className="mb-4 font-semibold text-white">なぜロックするのか</p>
+              <p className="mb-3">
+                アイデアの芽や市場の仮説を安心して共有するために、Pulsewave
+                は公開せずコミュニティ内に閉じています。承認されたメンバーだけがログを追えます。
+              </p>
+              <p>
+                ログインが完了するとフルタイムラインと composer
+                が解放され、Supabase に同期されるリアルタイムの Pulse
+                を閲覧・投稿できます。
+              </p>
+            </div>
+          </section>
+        </main>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen px-4 py-10 sm:px-8 md:py-16">
       <main className="mx-auto flex max-w-6xl flex-col gap-8">
@@ -260,7 +306,6 @@ export default function Home() {
               isLoading={loading}
             />
             <InsightPanel insights={insights} />
-            <DeployCard />
           </aside>
         </section>
       </main>
@@ -285,8 +330,7 @@ function Hero() {
             Pulsewave
           </h1>
           <p className="max-w-3xl text-lg text-slate-300">
-            アイデアを最速で世界に流すためのミニSNSテンプレート。Next.js 15 + Supabase
-            + Vercel で構築され、即座にデプロイして拡張できます。
+            AI を武器にものづくりを続ける開発者たちのための、招待制ミニSNS。Next.js 15 と Supabase で構築された進捗ログです。
           </p>
         </div>
         <div className="flex flex-wrap gap-4">
@@ -295,12 +339,6 @@ function Hero() {
             className="rounded-xl bg-gradient-to-r from-sky-400 via-cyan-400 to-blue-500 px-5 py-3 text-sm font-semibold text-slate-900 shadow-lg shadow-cyan-500/30 transition hover:translate-y-0.5"
           >
             まずはポストしてみる
-          </a>
-          <a
-            href="#deploy"
-            className="rounded-xl border border-white/20 px-5 py-3 text-sm font-semibold text-slate-100 transition hover:border-cyan-300 hover:text-white"
-          >
-            Vercelにワンクリックデプロイ
           </a>
         </div>
       </div>
@@ -680,42 +718,6 @@ function InsightPanel({ insights }: { insights: Insight[] }) {
           </div>
         ))}
       </div>
-    </section>
-  );
-}
-
-function DeployCard() {
-  return (
-    <section id="deploy" className="glass-panel space-y-5 p-6 text-slate-200">
-      <div>
-        <p className="text-xs uppercase tracking-[0.3em] text-slate-400">Ship</p>
-        <h3 className="text-lg font-semibold text-white">3 steps to Vercel</h3>
-      </div>
-      <ol className="space-y-3 text-sm">
-        <li className="flex gap-3">
-          <span className="pill">1</span>
-          <p>このリポジトリをGitHubへ push（またはImport）。</p>
-        </li>
-        <li className="flex gap-3">
-          <span className="pill">2</span>
-          <p>
-            <span className="text-white">vercel.com/new</span> で「Import Project」を選択し、build command を
-            <code className="mx-1 rounded bg-white/10 px-1">next build</code> に設定。
-          </p>
-        </li>
-        <li className="flex gap-3">
-          <span className="pill">3</span>
-          <p>Supabase の環境変数を設定して Deploy。Pulsewave が世界に公開されます。</p>
-        </li>
-      </ol>
-      <a
-        className="inline-flex items-center justify-center rounded-2xl border border-white/20 px-4 py-2 text-sm font-semibold text-white transition hover:border-cyan-400/60"
-        href="https://vercel.com/new"
-        target="_blank"
-        rel="noreferrer"
-      >
-        Open Vercel dashboard →
-      </a>
     </section>
   );
 }
