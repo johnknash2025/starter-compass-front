@@ -13,13 +13,17 @@ create table if not exists public.posts (
   boosts integer not null default 0,
   replies integer not null default 0,
   avatar_hue integer not null default floor(random() * 360),
-  user_id text
+  user_id text,
+  is_bot boolean not null default false
 );
 
 alter table public.posts enable row level security;
 
 alter table if exists public.posts
   add column if not exists user_id text;
+
+alter table if exists public.posts
+  add column if not exists is_bot boolean not null default false;
 
 create or replace function public.increment_post_metric(p_post_id uuid, p_metric text)
 returns posts
