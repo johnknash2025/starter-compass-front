@@ -8,25 +8,18 @@ import type {
   ReactNode,
   SetStateAction,
 } from "react";
+import {
+  MAX_CHARACTERS,
+  SEED_POSTS,
+  buildInsights,
+  deriveTrendingTopics,
+  relativeTimeFromNow,
+  type Insight,
+  type PulsewavePost,
+  type TrendingTopic,
+} from "@/lib/pulsewave";
 
-type Post = {
-  id: string;
-  author: string;
-  handle: string;
-  content: string;
-  createdAt: string;
-  tags: string[];
-  likes: number;
-  boosts: number;
-  replies: number;
-  avatarHue: number;
-};
-
-type TrendingTopic = {
-  tag: string;
-  count: number;
-  momentum: number;
-};
+const API_BASE = "/api/posts";
 
 type Draft = {
   author: string;
@@ -35,76 +28,13 @@ type Draft = {
   tags: string;
 };
 
-const STORAGE_KEY = "pulsewave-posts";
-const MAX_CHARACTERS = 280;
+type ReactionField = "likes" | "boosts" | "replies";
 
-const seedPosts: Post[] = [
-  {
-    id: "p-1",
-    author: "Aki Tanaka",
-    handle: "@aki_design",
-    content:
-      "立て続けに3日 ship。夜の静けさ＋Next.js App Router の組み合わせ、やっぱり最強。",
-    createdAt: new Date(Date.now() - 1000 * 60 * 45).toISOString(),
-    tags: ["shipdaily", "nextjs", "nightshift"],
-    likes: 42,
-    boosts: 11,
-    replies: 6,
-    avatarHue: 210,
-  },
-  {
-    id: "p-2",
-    author: "Leo Martinez",
-    handle: "@leo_makes",
-    content:
-      "Launched a vibes-only community wall with Vercel Edge Functions today. Sub-50ms everywhere 🌍⚡️",
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 3).toISOString(),
-    tags: ["vercel", "edge", "shipdaily"],
-    likes: 65,
-    boosts: 18,
-    replies: 9,
-    avatarHue: 32,
-  },
-  {
-    id: "p-3",
-    author: "Kana",
-    handle: "@kana_wave",
-    content:
-      "コミュニティの声、全部AI要約に任せたら21時に余裕で散歩できた。Pulsewave でも試したい。",
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 8).toISOString(),
-    tags: ["ai", "workflow", "weekend"],
-    likes: 38,
-    boosts: 7,
-    replies: 4,
-    avatarHue: 320,
-  },
-  {
-    id: "p-4",
-    author: "Noah Park",
-    handle: "@noah.codes",
-    content:
-      "Micro-interactions are everything. Added tactile reactions + soft audio cues and retention spiked 17%.",
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 15).toISOString(),
-    tags: ["ux", "motion", "buildinpublic"],
-    likes: 54,
-    boosts: 12,
-    replies: 8,
-    avatarHue: 260,
-  },
-  {
-    id: "p-5",
-    author: "Sora",
-    handle: "@sora_codes",
-    content:
-      "朝ごはんの前に小さなSNS MVPをVercelに投げた。無駄な設定ゼロ… もう戻れない。",
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(),
-    tags: ["vercel", "mvp", "founder"],
-    likes: 71,
-    boosts: 21,
-    replies: 10,
-    avatarHue: 180,
-  },
-];
+type PostsResponse = {
+  posts: PulsewavePost[];
+  fallback?: boolean;
+  error?: string;
+};
 
 const defaultDraft = (): Draft => ({
   author: "あなた",
@@ -114,32 +44,42 @@ const defaultDraft = (): Draft => ({
 });
 
 export default function Home() {
-  const [posts, setPosts] = useState<Post[]>(seedPosts);
+  const [posts, setPosts] = useState<PulsewavePost[]>(SEED_POSTS);
   const [draft, setDraft] = useState<Draft>(defaultDraft);
   const [formError, setFormError] = useState("");
   const [filterTag, setFilterTag] = useState<string | null>(null);
-  const [hydrated, setHydrated] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [syncError, setSyncError] = useState("");
+  const [isFallback, setIsFallback] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    const stored = window.localStorage.getItem(STORAGE_KEY);
-    if (stored) {
+    let cancelled = false;
+    const fetchPosts = async () => {
       try {
-        const parsed = JSON.parse(stored) as Post[];
-        if (Array.isArray(parsed) && parsed.length) {
-          setPosts(parsed);
+        const response = await fetch(API_BASE, { cache: "no-store" });
+        const payload = (await response.json()) as PostsResponse;
+        if (cancelled) return;
+        setPosts(payload.posts ?? []);
+        setIsFallback(Boolean(payload.fallback));
+        setSyncError(payload.error ?? "");
+      } catch (error) {
+        console.error("[pulsewave] failed to load posts", error);
+        if (!cancelled) {
+          setSyncError("Supabaseへの接続に失敗しました。ローカルデータを表示します。");
+          setPosts(SEED_POSTS);
+          setIsFallback(true);
         }
-      } catch {
-        window.localStorage.removeItem(STORAGE_KEY);
+      } finally {
+        if (!cancelled) setLoading(false);
       }
-    }
-    setHydrated(true);
-  }, []);
+    };
 
-  useEffect(() => {
-    if (!hydrated || typeof window === "undefined") return;
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(posts));
-  }, [posts, hydrated]);
+    fetchPosts();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const trendingTopics = useMemo(() => deriveTrendingTopics(posts), [posts]);
   const visiblePosts = useMemo(
@@ -149,7 +89,7 @@ export default function Home() {
   );
   const insights = useMemo(() => buildInsights(posts), [posts]);
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const trimmed = draft.content.trim();
     if (!trimmed) {
@@ -161,48 +101,77 @@ export default function Home() {
       return;
     }
 
-    const normalizedHandle = normalizeHandle(draft.handle);
-    const parsedTags = parseTags(draft.tags);
-
-    const nextPost: Post = {
-      id:
-        typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
-          ? crypto.randomUUID()
-          : `local-${Date.now()}`,
-      author: draft.author.trim() || "Guest",
-      handle: normalizedHandle || "@guest",
-      content: trimmed,
-      createdAt: new Date().toISOString(),
-      tags: parsedTags.length ? parsedTags : ["pulsewave"],
-      likes: Math.floor(Math.random() * 5),
-      boosts: 0,
-      replies: 0,
-      avatarHue: Math.floor(Math.random() * 360),
-    };
-
-    setPosts((prev) => [nextPost, ...prev]);
-    setDraft((current) => ({
-      ...current,
-      content: "",
-      tags: "",
-    }));
+    setIsSubmitting(true);
     setFormError("");
-    if (filterTag && !nextPost.tags.includes(filterTag)) {
-      setFilterTag(null);
+
+    try {
+      const response = await fetch(API_BASE, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          author: draft.author,
+          handle: draft.handle,
+          content: trimmed,
+          tags: draft.tags,
+        }),
+      });
+
+      const payload = (await response.json()) as { post?: PulsewavePost; error?: string };
+
+      if (!response.ok || !payload.post) {
+        setFormError(payload.error ?? "投稿に失敗しました。もう一度お試しください。");
+        return;
+      }
+
+      setPosts((prev) => [payload.post!, ...prev]);
+      setDraft((current) => ({ ...current, content: "", tags: "" }));
+      setSyncError("");
+      setIsFallback(false);
+      if (filterTag && !payload.post.tags.includes(filterTag)) {
+        setFilterTag(null);
+      }
+    } catch (error) {
+      console.error("[pulsewave] submit failed", error);
+      setFormError("ネットワークに接続できませんでした。");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  const handleReaction = (id: string, field: "likes" | "boosts" | "replies") =>
+  const handleReaction = (id: string, field: ReactionField) => {
+    const snapshot = posts;
     setPosts((prev) =>
       prev.map((post) =>
         post.id === id ? { ...post, [field]: post[field] + 1 } : post,
       ),
     );
 
+    fetch(`${API_BASE}/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ field }),
+    })
+      .then(async (response) => {
+        const payload = (await response.json()) as { post?: PulsewavePost; error?: string };
+        if (!response.ok || !payload.post) {
+          throw new Error(payload.error ?? "Failed to update post");
+        }
+        setPosts((prev) =>
+          prev.map((post) => (post.id === payload.post!.id ? payload.post! : post)),
+        );
+      })
+      .catch((error) => {
+        console.error("[pulsewave] reaction failed", error);
+        setSyncError("リアクションを保存できませんでした。");
+        setPosts(snapshot);
+      });
+  };
+
   return (
     <div className="min-h-screen px-4 py-10 sm:px-8 md:py-16">
       <main className="mx-auto flex max-w-6xl flex-col gap-8">
         <Hero />
+        <DataStatusBanner isFallback={isFallback} error={syncError} />
         <section className="grid gap-6 lg:grid-cols-[2fr_1fr]">
           <div className="space-y-6">
             <Composer
@@ -210,6 +179,7 @@ export default function Home() {
               formError={formError}
               onChange={setDraft}
               onSubmit={handleSubmit}
+              isSubmitting={isSubmitting}
             />
             <Feed
               posts={visiblePosts}
@@ -218,6 +188,7 @@ export default function Home() {
               onTagClick={(tag) =>
                 setFilterTag((current) => (current === tag ? null : tag))
               }
+              isLoading={loading}
             />
           </div>
           <aside className="space-y-6">
@@ -225,6 +196,7 @@ export default function Home() {
               topics={trendingTopics}
               activeTag={filterTag}
               onSelect={setFilterTag}
+              isLoading={loading}
             />
             <InsightPanel insights={insights} />
             <DeployCard />
@@ -238,22 +210,22 @@ export default function Home() {
 function Hero() {
   return (
     <header className="glass-panel relative overflow-hidden p-8">
-      <div className="absolute inset-0 pointer-events-none">
+      <div className="pointer-events-none absolute inset-0">
         <div className="h-full w-full bg-[radial-gradient(circle_at_20%_20%,rgba(56,189,248,0.25),transparent_45%)]" />
         <div className="h-full w-full bg-[radial-gradient(circle_at_80%_0%,rgba(232,121,249,0.3),transparent_35%)]" />
       </div>
       <div className="relative space-y-6">
         <span className="pill inline-flex items-center gap-2">
           <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-300" />
-          Ready for Vercel
+          Powered by Supabase
         </span>
         <div className="space-y-4">
           <h1 className="text-4xl font-semibold leading-tight text-slate-50 sm:text-5xl">
             Pulsewave
           </h1>
           <p className="max-w-3xl text-lg text-slate-300">
-            アイデアを最速で世界に流すためのミニSNSテンプレート。Next.js
-            15とApp Routerで構築され、即座にVercelへデプロイできます。
+            アイデアを最速で世界に流すためのミニSNSテンプレート。Next.js 15 + Supabase
+            + Vercel で構築され、即座にデプロイして拡張できます。
           </p>
         </div>
         <div className="flex flex-wrap gap-4">
@@ -280,9 +252,10 @@ type ComposerProps = {
   formError: string;
   onChange: Dispatch<SetStateAction<Draft>>;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  isSubmitting: boolean;
 };
 
-function Composer({ draft, formError, onChange, onSubmit }: ComposerProps) {
+function Composer({ draft, formError, onChange, onSubmit, isSubmitting }: ComposerProps) {
   const remaining = MAX_CHARACTERS - draft.content.length;
 
   const handleInput =
@@ -292,21 +265,13 @@ function Composer({ draft, formError, onChange, onSubmit }: ComposerProps) {
     };
 
   return (
-    <form
-      id="composer"
-      onSubmit={onSubmit}
-      className="glass-panel space-y-5 p-6"
-    >
+    <form id="composer" onSubmit={onSubmit} className="glass-panel space-y-5 p-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="text-xs uppercase tracking-[0.3em] text-slate-400">
-            Composer
-          </p>
-          <h2 className="text-2xl font-semibold text-white">
-            今日の Pulse を落とす
-          </h2>
+          <p className="text-xs uppercase tracking-[0.3em] text-slate-400">Composer</p>
+          <h2 className="text-2xl font-semibold text-white">今日の Pulse を落とす</h2>
         </div>
-        <span className="pill">ローカル保存</span>
+        <span className="pill">Supabase Sync</span>
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="space-y-1 text-sm text-slate-300">
@@ -355,7 +320,7 @@ function Composer({ draft, formError, onChange, onSubmit }: ComposerProps) {
         {formError ? (
           <span className="text-sm text-rose-300">{formError}</span>
         ) : (
-          <span className="text-sm text-emerald-300">Auto-saved locally</span>
+          <span className="text-sm text-emerald-300">Supabaseと同期</span>
         )}
       </div>
       <div className="flex flex-wrap justify-end gap-3">
@@ -364,7 +329,10 @@ function Composer({ draft, formError, onChange, onSubmit }: ComposerProps) {
           onClick={() =>
             onChange((prev) => ({
               ...prev,
-              content: prev.content + (prev.content ? "\n" : "") + "Building something small but meaningful.",
+              content:
+                prev.content +
+                (prev.content ? "\n" : "") +
+                "Building something small but meaningful.",
             }))
           }
           className="rounded-xl border border-white/20 px-4 py-2 text-sm font-medium text-slate-100 transition hover:border-cyan-300/60"
@@ -374,9 +342,9 @@ function Composer({ draft, formError, onChange, onSubmit }: ComposerProps) {
         <button
           type="submit"
           className="rounded-xl bg-gradient-to-r from-cyan-400 via-sky-400 to-blue-500 px-5 py-2.5 text-sm font-semibold text-slate-900 transition hover:translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50"
-          disabled={!draft.content.trim()}
+          disabled={!draft.content.trim() || isSubmitting}
         >
-          Pulse を共有
+          {isSubmitting ? "送信中..." : "Pulse を共有"}
         </button>
       </div>
     </form>
@@ -384,20 +352,21 @@ function Composer({ draft, formError, onChange, onSubmit }: ComposerProps) {
 }
 
 type FeedProps = {
-  posts: Post[];
+  posts: PulsewavePost[];
   activeTag: string | null;
-  onReact: (id: string, field: "likes" | "boosts" | "replies") => void;
+  onReact: (id: string, field: ReactionField) => void;
   onTagClick: (tag: string) => void;
+  isLoading: boolean;
 };
 
-function Feed({ posts, activeTag, onReact, onTagClick }: FeedProps) {
+function Feed({ posts, activeTag, onReact, onTagClick, isLoading }: FeedProps) {
+  const showEmpty = !isLoading && posts.length === 0;
+
   return (
     <section className="glass-panel space-y-4 p-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="text-xs uppercase tracking-[0.3em] text-slate-400">
-            Timeline
-          </p>
+          <p className="text-xs uppercase tracking-[0.3em] text-slate-400">Timeline</p>
           <h2 className="text-2xl font-semibold text-white">Live pulses</h2>
         </div>
         {activeTag && (
@@ -411,15 +380,12 @@ function Feed({ posts, activeTag, onReact, onTagClick }: FeedProps) {
         )}
       </div>
       <div className="space-y-4">
-        {posts.map((post) => (
-          <PostCard
-            key={post.id}
-            post={post}
-            onReact={onReact}
-            onTagClick={onTagClick}
-          />
-        ))}
-        {!posts.length && (
+        {isLoading && <LoadingSkeletonList />}
+        {!isLoading &&
+          posts.map((post) => (
+            <PostCard key={post.id} post={post} onReact={onReact} onTagClick={onTagClick} />
+          ))}
+        {showEmpty && (
           <div className="rounded-2xl border border-dashed border-white/20 p-6 text-center text-sm text-slate-400">
             まだこのタグの投稿はありません。最初の Pulse を落としてみませんか？
           </div>
@@ -430,8 +396,8 @@ function Feed({ posts, activeTag, onReact, onTagClick }: FeedProps) {
 }
 
 type PostCardProps = {
-  post: Post;
-  onReact: (id: string, field: "likes" | "boosts" | "replies") => void;
+  post: PulsewavePost;
+  onReact: (id: string, field: ReactionField) => void;
   onTagClick: (tag: string) => void;
 };
 
@@ -453,19 +419,13 @@ function PostCard({ post, onReact, onTagClick }: PostCardProps) {
         <div className="flex-1 space-y-3">
           <header className="flex flex-wrap items-baseline gap-2">
             <div>
-              <p className="text-base font-semibold text-white">
-                {post.author}
-              </p>
+              <p className="text-base font-semibold text-white">{post.author}</p>
               <p className="text-sm text-slate-400">{post.handle}</p>
             </div>
             <span className="text-xs text-slate-500">·</span>
-            <span className="text-xs text-slate-400">
-              {relativeTimeFromNow(post.createdAt)}
-            </span>
+            <span className="text-xs text-slate-400">{relativeTimeFromNow(post.createdAt)}</span>
           </header>
-          <p className="whitespace-pre-line text-base text-slate-100">
-            {post.content}
-          </p>
+          <p className="whitespace-pre-line text-base text-slate-100">{post.content}</p>
           <div className="flex flex-wrap gap-2">
             {post.tags.map((tag) => (
               <button
@@ -485,18 +445,8 @@ function PostCard({ post, onReact, onTagClick }: PostCardProps) {
               onClick={() => onReact(post.id, "boosts")}
               icon={
                 <svg width="16" height="16" viewBox="0 0 20 20" fill="none">
-                  <path
-                    d="M5 11L9 7L11 9L15 5"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                  />
-                  <path
-                    d="M11 5H15V9"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                  />
+                  <path d="M5 11L9 7L11 9L15 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                  <path d="M11 5H15V9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
                 </svg>
               }
             />
@@ -522,16 +472,8 @@ function PostCard({ post, onReact, onTagClick }: PostCardProps) {
               onClick={() => onReact(post.id, "replies")}
               icon={
                 <svg width="16" height="16" viewBox="0 0 20 20" fill="none">
-                  <path
-                    d="M4 9H8L6 13H8L4 17V11H2L4 9Z"
-                    fill="currentColor"
-                  />
-                  <path
-                    d="M10 4H18V14H12L8 18V4H10Z"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinejoin="round"
-                  />
+                  <path d="M4 9H8L6 13H8L4 17V11H2L4 9Z" fill="currentColor" />
+                  <path d="M10 4H18V14H12L8 18V4H10Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
                 </svg>
               }
             />
@@ -567,9 +509,10 @@ type TrendsProps = {
   topics: TrendingTopic[];
   activeTag: string | null;
   onSelect: (tag: string | null) => void;
+  isLoading: boolean;
 };
 
-function Trends({ topics, activeTag, onSelect }: TrendsProps) {
+function Trends({ topics, activeTag, onSelect, isLoading }: TrendsProps) {
   return (
     <section className="glass-panel space-y-5 p-6">
       <div className="flex items-center justify-between">
@@ -585,35 +528,35 @@ function Trends({ topics, activeTag, onSelect }: TrendsProps) {
         )}
       </div>
       <ul className="space-y-4">
-        {topics.map((topic) => (
-          <li
-            key={topic.tag}
-            className={`rounded-2xl border px-4 py-3 transition ${
-              activeTag === topic.tag
-                ? "border-cyan-400/70 bg-cyan-400/10"
-                : "border-white/10 bg-white/5 hover:border-cyan-200/40"
-            }`}
-          >
-            <button
-              type="button"
-              className="flex w-full items-center justify-between text-left"
-              onClick={() =>
-                onSelect(activeTag === topic.tag ? null : topic.tag)
-              }
+        {isLoading && <LoadingSkeletonList compact />}
+        {!isLoading &&
+          topics.map((topic) => (
+            <li
+              key={topic.tag}
+              className={`rounded-2xl border px-4 py-3 transition ${
+                activeTag === topic.tag
+                  ? "border-cyan-400/70 bg-cyan-400/10"
+                  : "border-white/10 bg-white/5 hover:border-cyan-200/40"
+              }`}
             >
-              <div>
-                <p className="text-sm font-semibold text-white">#{topic.tag}</p>
-                <p className="text-xs text-slate-400">
-                  {topic.count} posts · momentum +{topic.momentum}%
-                </p>
-              </div>
-              <span className="pill text-xs text-slate-200">
-                {topic.momentum > 50 ? "🔥 hot" : "↗︎ rising"}
-              </span>
-            </button>
-          </li>
-        ))}
-        {!topics.length && (
+              <button
+                type="button"
+                className="flex w-full items-center justify-between text-left"
+                onClick={() => onSelect(activeTag === topic.tag ? null : topic.tag)}
+              >
+                <div>
+                  <p className="text-sm font-semibold text-white">#{topic.tag}</p>
+                  <p className="text-xs text-slate-400">
+                    {topic.count} posts · momentum +{topic.momentum}%
+                  </p>
+                </div>
+                <span className="pill text-xs text-slate-200">
+                  {topic.momentum > 50 ? "🔥 hot" : "↗︎ rising"}
+                </span>
+              </button>
+            </li>
+          ))}
+        {!isLoading && !topics.length && (
           <li className="rounded-2xl border border-dashed border-white/20 px-4 py-3 text-center text-sm text-slate-400">
             まだタグがありません。最初の投稿で作ってみましょう。
           </li>
@@ -623,27 +566,16 @@ function Trends({ topics, activeTag, onSelect }: TrendsProps) {
   );
 }
 
-type Insight = {
-  label: string;
-  value: string;
-  meta: string;
-};
-
 function InsightPanel({ insights }: { insights: Insight[] }) {
   return (
     <section className="glass-panel space-y-5 p-6">
       <div>
-        <p className="text-xs uppercase tracking-[0.3em] text-slate-400">
-          Insights
-        </p>
+        <p className="text-xs uppercase tracking-[0.3em] text-slate-400">Insights</p>
         <h3 className="text-lg font-semibold text-white">Community vitals</h3>
       </div>
       <div className="grid gap-4 sm:grid-cols-2">
         {insights.map((insight) => (
-          <div
-            key={insight.label}
-            className="rounded-2xl border border-white/10 bg-white/5 p-4"
-          >
+          <div key={insight.label} className="rounded-2xl border border-white/10 bg-white/5 p-4">
             <p className="text-xs text-slate-400">{insight.label}</p>
             <p className="text-2xl font-semibold text-white">{insight.value}</p>
             <p className="text-xs text-slate-500">{insight.meta}</p>
@@ -656,17 +588,10 @@ function InsightPanel({ insights }: { insights: Insight[] }) {
 
 function DeployCard() {
   return (
-    <section
-      id="deploy"
-      className="glass-panel space-y-5 p-6 text-slate-200"
-    >
+    <section id="deploy" className="glass-panel space-y-5 p-6 text-slate-200">
       <div>
-        <p className="text-xs uppercase tracking-[0.3em] text-slate-400">
-          Ship
-        </p>
-        <h3 className="text-lg font-semibold text-white">
-          3 steps to Vercel
-        </h3>
+        <p className="text-xs uppercase tracking-[0.3em] text-slate-400">Ship</p>
+        <h3 className="text-lg font-semibold text-white">3 steps to Vercel</h3>
       </div>
       <ol className="space-y-3 text-sm">
         <li className="flex gap-3">
@@ -676,15 +601,13 @@ function DeployCard() {
         <li className="flex gap-3">
           <span className="pill">2</span>
           <p>
-            <span className="text-white">vercel.com/new</span> で「Import
-            Project」を選択し、build command を `next build` に設定。
+            <span className="text-white">vercel.com/new</span> で「Import Project」を選択し、build command を
+            <code className="mx-1 rounded bg-white/10 px-1">next build</code> に設定。
           </p>
         </li>
         <li className="flex gap-3">
           <span className="pill">3</span>
-          <p>
-            環境変数は不要。Deploy 後、`Pulsewave` が世界に公開されます。
-          </p>
+          <p>Supabase の環境変数を設定して Deploy。Pulsewave が世界に公開されます。</p>
         </li>
       </ol>
       <a
@@ -699,123 +622,33 @@ function DeployCard() {
   );
 }
 
-function deriveTrendingTopics(posts: Post[]): TrendingTopic[] {
-  const now = Date.now();
-  const sixHours = 1000 * 60 * 60 * 6;
-  const map = new Map<string, { count: number; recent: number }>();
-
-  posts.forEach((post) => {
-    post.tags.forEach((tag) => {
-      const normalized = tag.toLowerCase();
-      const existing = map.get(normalized) ?? { count: 0, recent: 0 };
-      existing.count += 1;
-      if (now - new Date(post.createdAt).getTime() <= sixHours) {
-        existing.recent += 1;
-      }
-      map.set(normalized, existing);
-    });
-  });
-
-  return [...map.entries()]
-    .map(([tag, data]) => ({
-      tag,
-      count: data.count,
-      momentum: data.count
-        ? Math.min(120, Math.round((data.recent / data.count) * 100) + 20)
-        : 20,
-    }))
-    .sort((a, b) => b.count - a.count)
-    .slice(0, 5);
-}
-
-function buildInsights(posts: Post[]): Insight[] {
-  if (!posts.length) {
-    return [
-      { label: "Pulses today", value: "0", meta: "まずは最初の投稿から" },
-      {
-        label: "Avg. engagement",
-        value: "0",
-        meta: "リアクションがつくとここに表示されます",
-      },
-      { label: "Momentum", value: "0%", meta: "投稿を重ねると増加" },
-      {
-        label: "Active tags",
-        value: "0",
-        meta: "タグ付き投稿があると追跡",
-      },
-    ];
-  }
-
-  const now = Date.now();
-  const todayCount = posts.filter(
-    (post) => now - new Date(post.createdAt).getTime() < 86_400_000,
-  ).length;
-  const totalInteractions = posts.reduce(
-    (acc, post) => acc + post.likes + post.boosts + post.replies,
-    0,
+function DataStatusBanner({
+  isFallback,
+  error,
+}: {
+  isFallback: boolean;
+  error?: string;
+}) {
+  if (!isFallback && !error) return null;
+  return (
+    <div className="glass-panel border-yellow-300/30 bg-yellow-300/5 px-6 py-4 text-sm text-yellow-100">
+      {error ? error : "現在はシードデータを表示しています。Supabase を接続するとリアルタイム投稿に切り替わります。"}
+    </div>
   );
-  const uniqueTags = new Set(posts.flatMap((post) => post.tags));
-
-  return [
-    {
-      label: "Pulses today",
-      value: todayCount.toString(),
-      meta: "24時間以内の投稿数",
-    },
-    {
-      label: "Avg. engagement",
-      value: Math.round(totalInteractions / posts.length)
-        .toString()
-        .concat(" /post"),
-      meta: "Like + Boost + Reply",
-    },
-    {
-      label: "Momentum",
-      value: `${Math.min(100, todayCount * 12)}%`,
-      meta: "投稿頻度のざっくり指数",
-    },
-    {
-      label: "Active tags",
-      value: uniqueTags.size.toString(),
-      meta: "ハッシュタグの広がり",
-    },
-  ];
 }
 
-function relativeTimeFromNow(isoDate: string) {
-  const diff = Date.now() - new Date(isoDate).getTime();
-  const seconds = Math.max(1, Math.round(diff / 1000));
-  const minutes = Math.round(seconds / 60);
-  const hours = Math.round(minutes / 60);
-  const days = Math.round(hours / 24);
-
-  if (seconds < 60) return `${seconds}s`;
-  if (minutes < 60) return `${minutes}m`;
-  if (hours < 24) return `${hours}h`;
-  if (days < 7) return `${days}d`;
-
-  const date = new Date(isoDate);
-  return `${date.getMonth() + 1}/${date.getDate()}`;
-}
-
-function normalizeHandle(value: string) {
-  const trimmed = value.trim();
-  if (!trimmed) return "";
-  const cleaned = trimmed.replace(/[^a-zA-Z0-9_@.-]/g, "");
-  if (!cleaned.startsWith("@")) {
-    return `@${cleaned.replace(/^@+/, "")}`;
-  }
-  return cleaned;
-}
-
-function parseTags(value: string) {
-  return [
-    ...new Set(
-      value
-        .split(/[\s,]+/)
-        .map((tag) => tag.trim().replace(/^#/, ""))
-        .filter(Boolean)
-        .map((tag) => tag.toLowerCase()),
-    ),
-  ];
+function LoadingSkeletonList({ compact = false }: { compact?: boolean }) {
+  const items = compact ? 2 : 3;
+  return (
+    <div className="space-y-4">
+      {Array.from({ length: items }).map((_, index) => (
+        <div key={index} className="animate-pulse rounded-2xl border border-white/5 bg-white/5 p-4">
+          <div className="mb-3 h-4 w-1/3 rounded bg-white/10" />
+          <div className="mb-2 h-3 w-full rounded bg-white/10" />
+          <div className="mb-2 h-3 w-5/6 rounded bg-white/10" />
+          <div className="h-3 w-1/2 rounded bg-white/10" />
+        </div>
+      ))}
+    </div>
+  );
 }

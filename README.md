@@ -36,9 +36,27 @@ Feel free to split components or wire up a real backend/API route as you grow th
 
 1. Push this folder to GitHub (or import directly from the CLI).  
 2. On [vercel.com/new](https://vercel.com/new) choose the repo, keep the defaults (`build`: `next build`, `install`: `npm install`).  
-3. No env vars are needed. Hit **Deploy** and the timeline goes live globally.
+3. Set the Supabase env vars listed below, then hit **Deploy** to launch the real-time timeline.
 
 > Because everything is static + client-managed, the preview/production builds will behave exactly like local dev.
+
+---
+
+## Connect to Supabase
+
+1. Create a Supabase project and note the `PROJECT_URL` and `SERVICE_ROLE_KEY`.  
+2. Run the SQL in [`supabase/schema.sql`](supabase/schema.sql) from the Supabase SQL Editor to create the `posts` table + increment function.  
+3. Add the following environment variables (locally via `.env.local`, on Vercel via Project Settings → Environment Variables):
+
+```
+SUPABASE_URL=your-project-url
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+# (optionally) SUPABASE_KEY=your-service-role-key  # alias supported in code
+```
+
+> The service role key is only ever used inside Next.js Route Handlers, so it is never exposed to the browser. If you also want client-side Supabase access elsewhere, add `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
+
+Once those values are set, Pulsewave stores posts, reactions, and insights in Supabase instead of localStorage. If the env vars are missing, the UI gracefully falls back to local seed data so you can still demo the experience.
 
 ---
 
