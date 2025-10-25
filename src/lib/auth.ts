@@ -1,11 +1,12 @@
 import type { NextAuthOptions } from "next-auth";
+import CredentialsProvider from "next-auth/providers/credentials";
 import GitHubProvider from "next-auth/providers/github";
 import GoogleProvider from "next-auth/providers/google";
 
-const providers: NextAuthOptions["providers"] = [];
+const configuredProviders: NextAuthOptions["providers"] = [];
 
 if (process.env.GITHUB_ID && process.env.GITHUB_SECRET) {
-  providers.push(
+  configuredProviders.push(
     GitHubProvider({
       clientId: process.env.GITHUB_ID,
       clientSecret: process.env.GITHUB_SECRET,
@@ -14,7 +15,7 @@ if (process.env.GITHUB_ID && process.env.GITHUB_SECRET) {
 }
 
 if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
-  providers.push(
+  configuredProviders.push(
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET,
@@ -22,16 +23,19 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
   );
 }
 
-if (!providers.length) {
-  throw new Error(
-    "NextAuth: 少なくとも1つの OAuth プロバイダを設定してください（GitHub / Google）。",
-  );
-}
+export const authEnabled = configuredProviders.length > 0;
 
-const secret = process.env.NEXTAUTH_SECRET;
-if (!secret) {
-  throw new Error("NEXTAUTH_SECRET が設定されていません。");
-}
+const providers = authEnabled
+  ? configuredProviders
+  : [
+      CredentialsProvider({
+        name: "placeholder",
+        credentials: {},
+        async authorize() {
+          throw new Error("OAuth providers are not configured.");
+        },
+      }),
+    ];
 
 export const authOptions: NextAuthOptions = {
   providers,
@@ -43,5 +47,5 @@ export const authOptions: NextAuthOptions = {
       return session;
     },
   },
-  secret,
+  secret: process.env.NEXTAUTH_SECRET,
 };

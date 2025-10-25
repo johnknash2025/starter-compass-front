@@ -60,6 +60,31 @@ export default function Home() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { data: session, status } = useSession();
   const isAuthenticated = status === "authenticated";
+  const [providerAvailability, setProviderAvailability] = useState<
+    Record<string, boolean>
+  >({});
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/auth/providers")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((result: Record<string, { id: string }> | null) => {
+        if (!cancelled && result) {
+          setProviderAvailability({
+            github: Boolean(result.github),
+            google: Boolean(result.google),
+          });
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setProviderAvailability({});
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const sessionHandle =
     session?.user
       ?
@@ -198,7 +223,11 @@ export default function Home() {
   return (
     <div className="min-h-screen px-4 py-10 sm:px-8 md:py-16">
       <main className="mx-auto flex max-w-6xl flex-col gap-8">
-        <AuthToolbar user={currentUser} isAuthenticated={isAuthenticated} />
+        <AuthToolbar
+          user={currentUser}
+          isAuthenticated={isAuthenticated}
+          providers={providerAvailability}
+        />
         <Hero />
         <DataStatusBanner isFallback={isFallback} error={syncError} />
         <section className="grid gap-6 lg:grid-cols-[2fr_1fr]">
@@ -211,6 +240,7 @@ export default function Home() {
               isSubmitting={isSubmitting}
               isAuthenticated={isAuthenticated}
               currentUser={currentUser}
+              providers={providerAvailability}
             />
             <Feed
               posts={visiblePosts}
@@ -281,9 +311,11 @@ function Hero() {
 function AuthToolbar({
   user,
   isAuthenticated,
+  providers,
 }: {
   user: UserIdentity | null;
   isAuthenticated: boolean;
+  providers: Record<string, boolean>;
 }) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-white/10 bg-white/5 px-5 py-3">
@@ -303,7 +335,7 @@ function AuthToolbar({
           </button>
         </div>
       ) : (
-        <SignInButtons compact />
+        <SignInButtons compact providers={providers} />
       )}
     </div>
   );
@@ -317,6 +349,7 @@ type ComposerProps = {
   isSubmitting: boolean;
   isAuthenticated: boolean;
   currentUser: UserIdentity | null;
+  providers: Record<string, boolean>;
 };
 
 function Composer({
@@ -327,6 +360,7 @@ function Composer({
   isSubmitting,
   isAuthenticated,
   currentUser,
+  providers,
 }: ComposerProps) {
   const remaining = MAX_CHARACTERS - draft.content.length;
   const composerDisabled = !draft.content.trim() || isSubmitting || !isAuthenticated;
@@ -352,7 +386,7 @@ function Composer({
         <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-slate-300">
           <p className="mb-3 font-medium text-white">まずはログインしてください。</p>
           <p className="mb-3">GitHub または Google で認証すると、あなたのアイデンティティで Pulse を投稿できます。</p>
-          <SignInButtons />
+          <SignInButtons providers={providers} />
         </div>
       )}
       <label className="space-y-2 text-sm text-slate-300">
@@ -721,24 +755,34 @@ function UserBadge({
   );
 }
 
-function SignInButtons({ compact = false }: { compact?: boolean }) {
+function SignInButtons({
+  compact = false,
+  providers,
+}: {
+  compact?: boolean;
+  providers: Record<string, boolean>;
+}) {
   const baseClass =
-    "rounded-full border border-white/20 px-3 py-1 text-xs font-semibold text-slate-100 transition hover:border-cyan-300/60";
+    "rounded-full border border-white/20 px-3 py-1 text-xs font-semibold text-slate-100 transition hover:border-cyan-300/60 disabled:cursor-not-allowed disabled:border-white/10 disabled:text-slate-500";
+  const githubEnabled = providers.github ?? false;
+  const googleEnabled = providers.google ?? false;
   return (
     <div className={`flex flex-wrap gap-2 ${compact ? "text-xs" : "text-sm"}`}>
       <button
         type="button"
         onClick={() => signIn("github", { callbackUrl: "/" })}
         className={baseClass}
+        disabled={!githubEnabled}
       >
-        GitHubでログイン
+        {githubEnabled ? "GitHubでログイン" : "GitHub未設定"}
       </button>
       <button
         type="button"
         onClick={() => signIn("google", { callbackUrl: "/" })}
         className={baseClass}
+        disabled={!googleEnabled}
       >
-        Googleでログイン
+        {googleEnabled ? "Googleでログイン" : "Google未設定"}
       </button>
     </div>
   );
