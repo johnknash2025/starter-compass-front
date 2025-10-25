@@ -1,6 +1,6 @@
 ## Pulsewave - Vercel-ready Mini SNS
 
-Pulsewave is a lightweight social feed you can deploy to Vercel in minutes. It is built on **Next.js 15 (App Router)** with zero additional services, so it ships anywhere Vercel can run. All posts are cached locally in the browser via `localStorage`, which keeps the prototype stateful without needing a database.
+Pulsewave is a lightweight social feed tailored for our private indie developer community. It runs on **Next.js 15 (App Router)** with Supabase for persistence, so we can iterate quickly without exposing internal APIs.
 
 ### Highlights
 
@@ -29,16 +29,6 @@ Visit [http://localhost:3000](http://localhost:3000) and start posting.
 - `src/app/layout.tsx` – metadata + Geist font wiring
 
 Feel free to split components or wire up a real backend/API route as you grow the feature set.
-
----
-
-## Deploy to Vercel
-
-1. Push this folder to GitHub (or import directly from the CLI).  
-2. On [vercel.com/new](https://vercel.com/new) choose the repo, keep the defaults (`build`: `next build`, `install`: `npm install`).  
-3. Set the Supabase env vars listed below, then hit **Deploy** to launch the real-time timeline.
-
-> Because everything is static + client-managed, the preview/production builds will behave exactly like local dev.
 
 ---
 
@@ -80,22 +70,6 @@ Pulsewave now requires a signed-in user to post or react. Set up both OAuth prov
 4. Optional: run `./scripts/push-vercel-env.sh` to sync these values to Vercel.
 
 After redeploying, a toolbar + composer prompt users to log in via GitHub or Google, and posts are tied to the authenticated identity. Avatar colors are also deterministic per handle, so the same user always appears with the same gradient.
-
----
-
-## Sync environment variables to Vercel (optional)
-
-環境変数を手で入力する代わりに、Vercel CLI と付属スクリプトでまとめて反映できます。
-
-```bash
-cd starter-compass-front
-npm install -g vercel            # まだの場合
-vercel login                     # 1度だけ
-vercel link                      # プロジェクトと紐付け
-./scripts/push-vercel-env.sh     # .env.local → development/preview/production へ同期
-```
-
-環境ごとの同期先を変えたい場合は `VERCEL_ENVIRONMENTS=development,production ./scripts/push-vercel-env.sh` のように指定してください。`VERCEL_PROJECT_NAME` を設定すると `vercel link` の検出がうまくいかない環境でも確実に紐付けできます。
 
 ---
 
