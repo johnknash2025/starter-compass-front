@@ -12,6 +12,7 @@ export type PulsewavePost = {
   replies: number;
   avatarHue: number;
   userId?: string | null;
+  isBot?: boolean;
 };
 
 export type TrendingTopic = {
@@ -227,6 +228,7 @@ export type PulsewavePostRow = {
   replies: number | null;
   avatar_hue: number | null;
   user_id: string | null;
+  is_bot: boolean | null;
 };
 
 export function mapRowToPost(row: PulsewavePostRow): PulsewavePost {
@@ -242,6 +244,7 @@ export function mapRowToPost(row: PulsewavePostRow): PulsewavePost {
     replies: row.replies ?? 0,
     avatarHue: row.avatar_hue ?? avatarHueFromHandle(row.handle),
     userId: row.user_id,
+    isBot: row.is_bot ?? false,
   };
 }
 
