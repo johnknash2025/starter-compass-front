@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import type {
   ChangeEvent,
@@ -8,11 +9,14 @@ import type {
   ReactNode,
   SetStateAction,
 } from "react";
+import { signIn, signOut, useSession } from "next-auth/react";
 import {
   MAX_CHARACTERS,
   SEED_POSTS,
   buildInsights,
+  deriveHandleFromIdentity,
   deriveTrendingTopics,
+  normalizeHandle,
   relativeTimeFromNow,
   type Insight,
   type PulsewavePost,
@@ -22,10 +26,14 @@ import {
 const API_BASE = "/api/posts";
 
 type Draft = {
-  author: string;
-  handle: string;
   content: string;
   tags: string;
+};
+
+type UserIdentity = {
+  name: string;
+  handle: string;
+  image?: string | null;
 };
 
 type ReactionField = "likes" | "boosts" | "replies";
@@ -37,8 +45,6 @@ type PostsResponse = {
 };
 
 const defaultDraft = (): Draft => ({
-  author: "あなた",
-  handle: "@maker",
   content: "",
   tags: "shipdaily",
 });
@@ -52,6 +58,50 @@ export default function Home() {
   const [syncError, setSyncError] = useState("");
   const [isFallback, setIsFallback] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const { data: session, status } = useSession();
+  const isAuthenticated = status === "authenticated";
+  const [providerAvailability, setProviderAvailability] = useState<
+    Record<string, boolean>
+  >({});
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/auth/providers")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((result: Record<string, { id: string }> | null) => {
+        if (!cancelled && result) {
+          setProviderAvailability({
+            github: Boolean(result.github),
+            google: Boolean(result.google),
+          });
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setProviderAvailability({});
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const sessionHandle =
+    session?.user
+      ?
+          normalizeHandle(
+            deriveHandleFromIdentity(session.user.name, session.user.email) ??
+              session.user.id ??
+              "",
+          ) || "@pulsewave"
+      : null;
+  const currentUser: UserIdentity | null =
+    isAuthenticated && session?.user && sessionHandle
+      ? {
+          name: session.user.name ?? "Pulsewave user",
+          handle: sessionHandle,
+          image: session.user.image,
+        }
+      : null;
 
   useEffect(() => {
     let cancelled = false;
@@ -101,6 +151,11 @@ export default function Home() {
       return;
     }
 
+    if (!isAuthenticated || !session?.user) {
+      setFormError("投稿するにはログインが必要です。");
+      return;
+    }
+
     setIsSubmitting(true);
     setFormError("");
 
@@ -109,8 +164,6 @@ export default function Home() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          author: draft.author,
-          handle: draft.handle,
           content: trimmed,
           tags: draft.tags,
         }),
@@ -170,6 +223,11 @@ export default function Home() {
   return (
     <div className="min-h-screen px-4 py-10 sm:px-8 md:py-16">
       <main className="mx-auto flex max-w-6xl flex-col gap-8">
+        <AuthToolbar
+          user={currentUser}
+          isAuthenticated={isAuthenticated}
+          providers={providerAvailability}
+        />
         <Hero />
         <DataStatusBanner isFallback={isFallback} error={syncError} />
         <section className="grid gap-6 lg:grid-cols-[2fr_1fr]">
@@ -180,6 +238,9 @@ export default function Home() {
               onChange={setDraft}
               onSubmit={handleSubmit}
               isSubmitting={isSubmitting}
+              isAuthenticated={isAuthenticated}
+              currentUser={currentUser}
+              providers={providerAvailability}
             />
             <Feed
               posts={visiblePosts}
@@ -247,16 +308,62 @@ function Hero() {
   );
 }
 
+function AuthToolbar({
+  user,
+  isAuthenticated,
+  providers,
+}: {
+  user: UserIdentity | null;
+  isAuthenticated: boolean;
+  providers: Record<string, boolean>;
+}) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-white/10 bg-white/5 px-5 py-3">
+      <div>
+        <p className="text-xs uppercase tracking-[0.4em] text-slate-400">Pulsewave</p>
+        <p className="text-sm text-slate-300">Global indie maker feed</p>
+      </div>
+      {isAuthenticated && user ? (
+        <div className="flex flex-wrap items-center gap-3">
+          <UserBadge user={user} variant="toolbar" />
+          <button
+            type="button"
+            onClick={() => signOut({ callbackUrl: "/" })}
+            className="rounded-full border border-white/15 px-3 py-1 text-xs font-semibold text-slate-100 transition hover:border-cyan-300/60"
+          >
+            ログアウト
+          </button>
+        </div>
+      ) : (
+        <SignInButtons compact providers={providers} />
+      )}
+    </div>
+  );
+}
+
 type ComposerProps = {
   draft: Draft;
   formError: string;
   onChange: Dispatch<SetStateAction<Draft>>;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   isSubmitting: boolean;
+  isAuthenticated: boolean;
+  currentUser: UserIdentity | null;
+  providers: Record<string, boolean>;
 };
 
-function Composer({ draft, formError, onChange, onSubmit, isSubmitting }: ComposerProps) {
+function Composer({
+  draft,
+  formError,
+  onChange,
+  onSubmit,
+  isSubmitting,
+  isAuthenticated,
+  currentUser,
+  providers,
+}: ComposerProps) {
   const remaining = MAX_CHARACTERS - draft.content.length;
+  const composerDisabled = !draft.content.trim() || isSubmitting || !isAuthenticated;
 
   const handleInput =
     (field: keyof Draft) =>
@@ -273,35 +380,23 @@ function Composer({ draft, formError, onChange, onSubmit, isSubmitting }: Compos
         </div>
         <span className="pill">Supabase Sync</span>
       </div>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <label className="space-y-1 text-sm text-slate-300">
-          表示名
-          <input
-            type="text"
-            value={draft.author}
-            onChange={handleInput("author")}
-            className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-base text-white outline-none transition focus:border-cyan-300/70"
-            placeholder="例) Yuzu"
-          />
-        </label>
-        <label className="space-y-1 text-sm text-slate-300">
-          ハンドル
-          <input
-            type="text"
-            value={draft.handle}
-            onChange={handleInput("handle")}
-            className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-base text-white outline-none transition focus:border-cyan-300/70"
-            placeholder="@maker"
-          />
-        </label>
-      </div>
+      {currentUser ? (
+        <UserBadge user={currentUser} variant="panel" />
+      ) : (
+        <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-slate-300">
+          <p className="mb-3 font-medium text-white">まずはログインしてください。</p>
+          <p className="mb-3">GitHub または Google で認証すると、あなたのアイデンティティで Pulse を投稿できます。</p>
+          <SignInButtons providers={providers} />
+        </div>
+      )}
       <label className="space-y-2 text-sm text-slate-300">
         いま何してる？
         <textarea
           value={draft.content}
           onChange={handleInput("content")}
           rows={4}
-          className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-base text-white outline-none transition focus:border-cyan-300/70"
+          disabled={!isAuthenticated}
+          className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-base text-white outline-none transition focus:border-cyan-300/70 disabled:cursor-not-allowed disabled:opacity-60"
           placeholder="progress, learnings, random sparks..."
         />
       </label>
@@ -311,7 +406,8 @@ function Composer({ draft, formError, onChange, onSubmit, isSubmitting }: Compos
           type="text"
           value={draft.tags}
           onChange={handleInput("tags")}
-          className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-base text-white outline-none transition focus:border-cyan-300/70"
+          disabled={!isAuthenticated}
+          className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-base text-white outline-none transition focus:border-cyan-300/70 disabled:cursor-not-allowed disabled:opacity-60"
           placeholder="shipdaily, vercel"
         />
       </label>
@@ -320,7 +416,9 @@ function Composer({ draft, formError, onChange, onSubmit, isSubmitting }: Compos
         {formError ? (
           <span className="text-sm text-rose-300">{formError}</span>
         ) : (
-          <span className="text-sm text-emerald-300">Supabaseと同期</span>
+          <span className="text-sm text-emerald-300">
+            {isAuthenticated ? "Supabaseと同期" : "ログインして投稿を有効化"}
+          </span>
         )}
       </div>
       <div className="flex flex-wrap justify-end gap-3">
@@ -342,9 +440,9 @@ function Composer({ draft, formError, onChange, onSubmit, isSubmitting }: Compos
         <button
           type="submit"
           className="rounded-xl bg-gradient-to-r from-cyan-400 via-sky-400 to-blue-500 px-5 py-2.5 text-sm font-semibold text-slate-900 transition hover:translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50"
-          disabled={!draft.content.trim() || isSubmitting}
+          disabled={composerDisabled}
         >
-          {isSubmitting ? "送信中..." : "Pulse を共有"}
+          {isAuthenticated ? (isSubmitting ? "送信中..." : "Pulse を共有") : "ログインが必要"}
         </button>
       </div>
     </form>
@@ -619,6 +717,74 @@ function DeployCard() {
         Open Vercel dashboard →
       </a>
     </section>
+  );
+}
+
+function UserBadge({
+  user,
+  variant = "panel",
+}: {
+  user: UserIdentity;
+  variant?: "panel" | "toolbar";
+}) {
+  const initials = user.name.slice(0, 1).toUpperCase();
+  return (
+    <div
+      className={`flex items-center gap-3 ${
+        variant === "toolbar" ? "text-sm" : "text-base"
+      }`}
+    >
+      {user.image ? (
+        <Image
+          src={user.image}
+          alt={`${user.name} avatar`}
+          width={40}
+          height={40}
+          className="h-10 w-10 rounded-full border border-white/20 object-cover"
+        />
+      ) : (
+        <div className="flex h-10 w-10 items-center justify-center rounded-full border border-white/20 bg-white/10 text-sm font-semibold text-white">
+          {initials}
+        </div>
+      )}
+      <div>
+        <p className="font-semibold text-white">{user.name}</p>
+        <p className="text-xs text-slate-400">{user.handle}</p>
+      </div>
+    </div>
+  );
+}
+
+function SignInButtons({
+  compact = false,
+  providers,
+}: {
+  compact?: boolean;
+  providers: Record<string, boolean>;
+}) {
+  const baseClass =
+    "rounded-full border border-white/20 px-3 py-1 text-xs font-semibold text-slate-100 transition hover:border-cyan-300/60 disabled:cursor-not-allowed disabled:border-white/10 disabled:text-slate-500";
+  const githubEnabled = providers.github ?? false;
+  const googleEnabled = providers.google ?? false;
+  return (
+    <div className={`flex flex-wrap gap-2 ${compact ? "text-xs" : "text-sm"}`}>
+      <button
+        type="button"
+        onClick={() => signIn("github", { callbackUrl: "/" })}
+        className={baseClass}
+        disabled={!githubEnabled}
+      >
+        {githubEnabled ? "GitHubでログイン" : "GitHub未設定"}
+      </button>
+      <button
+        type="button"
+        onClick={() => signIn("google", { callbackUrl: "/" })}
+        className={baseClass}
+        disabled={!googleEnabled}
+      >
+        {googleEnabled ? "Googleでログイン" : "Google未設定"}
+      </button>
+    </div>
   );
 }
 

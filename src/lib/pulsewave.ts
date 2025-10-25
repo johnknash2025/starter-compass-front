@@ -11,6 +11,7 @@ export type PulsewavePost = {
   boosts: number;
   replies: number;
   avatarHue: number;
+  userId?: string | null;
 };
 
 export type TrendingTopic = {
@@ -225,6 +226,7 @@ export type PulsewavePostRow = {
   boosts: number | null;
   replies: number | null;
   avatar_hue: number | null;
+  user_id: string | null;
 };
 
 export function mapRowToPost(row: PulsewavePostRow): PulsewavePost {
@@ -238,6 +240,31 @@ export function mapRowToPost(row: PulsewavePostRow): PulsewavePost {
     likes: row.likes ?? 0,
     boosts: row.boosts ?? 0,
     replies: row.replies ?? 0,
-    avatarHue: row.avatar_hue ?? Math.floor(Math.random() * 360),
+    avatarHue: row.avatar_hue ?? avatarHueFromHandle(row.handle),
+    userId: row.user_id,
   };
+}
+
+export function deriveHandleFromIdentity(
+  name?: string | null,
+  email?: string | null,
+) {
+  if (email) {
+    return `@${email.split("@")[0]}`;
+  }
+  if (name) {
+    return `@${name.replace(/\s+/g, "").toLowerCase()}`;
+  }
+  return undefined;
+}
+
+export function avatarHueFromHandle(handle: string) {
+  const normalized = handle.toLowerCase();
+  let hash = 0;
+  for (let i = 0; i < normalized.length; i += 1) {
+    hash = (hash << 5) - hash + normalized.charCodeAt(i);
+    hash |= 0;
+  }
+  const hue = Math.abs(hash) % 360;
+  return hue;
 }
