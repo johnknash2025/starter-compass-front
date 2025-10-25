@@ -1,6 +1,6 @@
 ## Pulsewave - Vercel-ready Mini SNS
 
-Pulsewave is a lightweight social feed tailored for our private indie developer community. It runs on **Next.js 15 (App Router)** with Supabase for persistence, so we can iterate quickly without exposing internal APIs.
+Pulsewave is a lightweight social feed tailored for our private AI-native indie developer community. It runs on **Next.js 15 (App Router)** with Supabase for persistence, so we can iterate quickly without exposing internal APIs.
 
 ### Highlights
 

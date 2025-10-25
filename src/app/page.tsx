@@ -239,7 +239,7 @@ export default function Home() {
                 招待制タイムライン
               </h2>
               <p className="text-slate-300">
-                ここは私たちの脳内ダンプ。プロダクトの進捗や試行錯誤を気兼ねなく共有するため、ログインしたメンバーだけが投稿とタイムラインを閲覧できます。
+                ここは AI を日常的に使い倒す開発者のための脳内ダンプ。プロダクトの進捗や試行錯誤を気兼ねなく共有するため、ログインしたメンバーだけが投稿とタイムラインを閲覧できます。
               </p>
               <ul className="list-disc space-y-2 pl-4 text-sm text-slate-400">
                 <li>GitHub / Google 認証で本人確認</li>
@@ -330,7 +330,7 @@ function Hero() {
             Pulsewave
           </h1>
           <p className="max-w-3xl text-lg text-slate-300">
-            コアメンバーだけが集うプライベートな進捗ログ。Next.js 15 と Supabase を使い、私たちのコミュニティ用に最適化されたミニSNSです。
+            AI を武器にものづくりを続ける開発者たちのための、招待制ミニSNS。Next.js 15 と Supabase で構築された進捗ログです。
           </p>
         </div>
         <div className="flex flex-wrap gap-4">
