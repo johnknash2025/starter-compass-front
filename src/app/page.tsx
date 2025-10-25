@@ -220,6 +220,52 @@ export default function Home() {
       });
   };
 
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen px-4 py-10 sm:px-8 md:py-16">
+        <main className="mx-auto flex max-w-5xl flex-col gap-8">
+          <AuthToolbar
+            user={null}
+            isAuthenticated={false}
+            providers={providerAvailability}
+          />
+          <Hero />
+          <section className="glass-panel grid gap-6 p-8 md:grid-cols-2">
+            <div className="space-y-4">
+              <p className="text-xs uppercase tracking-[0.35em] text-slate-400">
+                community only
+              </p>
+              <h2 className="text-3xl font-semibold text-white">
+                招待制タイムライン
+              </h2>
+              <p className="text-slate-300">
+                ここは私たちの脳内ダンプ。プロダクトの進捗や試行錯誤を気兼ねなく共有するため、ログインしたメンバーだけが投稿とタイムラインを閲覧できます。
+              </p>
+              <ul className="list-disc space-y-2 pl-4 text-sm text-slate-400">
+                <li>GitHub / Google 認証で本人確認</li>
+                <li>投稿は Supabase に暗号化保存</li>
+                <li>タグ・リアクション・インサイトもログイン後に解放</li>
+              </ul>
+              <SignInButtons providers={providerAvailability} />
+            </div>
+            <div className="rounded-2xl border border-white/5 bg-white/5 p-6 text-sm text-slate-300">
+              <p className="mb-4 font-semibold text-white">なぜロックするのか</p>
+              <p className="mb-3">
+                アイデアの芽や市場の仮説を安心して共有するために、Pulsewave
+                は公開せずコミュニティ内に閉じています。承認されたメンバーだけがログを追えます。
+              </p>
+              <p>
+                ログインが完了するとフルタイムラインと composer
+                が解放され、Supabase に同期されるリアルタイムの Pulse
+                を閲覧・投稿できます。
+              </p>
+            </div>
+          </section>
+        </main>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen px-4 py-10 sm:px-8 md:py-16">
       <main className="mx-auto flex max-w-6xl flex-col gap-8">
