@@ -1,12 +1,16 @@
 import { NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import {
   MAX_CHARACTERS,
   SEED_POSTS,
+  avatarHueFromHandle,
+  deriveHandleFromIdentity,
   mapRowToPost,
   normalizeHandle,
   parseTags,
 } from "@/lib/pulsewave";
+import { authOptions } from "@/lib/auth";
 
 export async function GET() {
   try {
@@ -42,6 +46,11 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user) {
+      return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+    }
+
     const payload = (await request.json()) as Partial<
       Record<"author" | "handle" | "content" | "tags", unknown>
     >;
@@ -61,9 +70,12 @@ export async function POST(request: Request) {
       );
     }
 
-    const author = String(payload.author ?? "").trim() || "Guest";
-    const handle =
-      normalizeHandle(String(payload.handle ?? "")) || "@guest";
+    const derivedHandle =
+      deriveHandleFromIdentity(session.user.name, session.user.email) ??
+      session.user.id ??
+      "";
+    const author = (session.user.name ?? "").trim() || "Guest";
+    const handle = normalizeHandle(derivedHandle) || "@guest";
 
     const tagsInput = Array.isArray(payload.tags)
       ? payload.tags.join(" ")
@@ -71,7 +83,7 @@ export async function POST(request: Request) {
     const tags = parseTags(tagsInput);
 
     const supabase = getSupabaseAdmin();
-    const avatarHue = Math.floor(Math.random() * 360);
+    const avatarHue = avatarHueFromHandle(handle);
 
     const { data, error } = await supabase
       .from("posts")
@@ -84,6 +96,7 @@ export async function POST(request: Request) {
         boosts: 0,
         replies: 0,
         avatar_hue: avatarHue,
+        user_id: session.user.id ?? session.user.email ?? null,
       })
       .select()
       .single();

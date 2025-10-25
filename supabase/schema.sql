@@ -12,10 +12,14 @@ create table if not exists public.posts (
   likes integer not null default 0,
   boosts integer not null default 0,
   replies integer not null default 0,
-  avatar_hue integer not null default floor(random() * 360)
+  avatar_hue integer not null default floor(random() * 360),
+  user_id text
 );
 
 alter table public.posts enable row level security;
+
+alter table if exists public.posts
+  add column if not exists user_id text;
 
 create or replace function public.increment_post_metric(p_post_id uuid, p_metric text)
 returns posts
