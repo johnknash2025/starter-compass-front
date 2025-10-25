@@ -1,14 +1,14 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { mapRowToPost, type PulsewavePostRow } from "@/lib/pulsewave";
 
 const ALLOWED_FIELDS = new Set(["likes", "boosts", "replies"]);
 
-export async function PATCH(
-  request: Request,
-  { params }: { params: { id: string } },
-) {
+type RouteContext = { params: Promise<{ id: string }> };
+
+export async function PATCH(request: NextRequest, context: RouteContext) {
   try {
+    const { id } = await context.params;
     const payload = (await request.json()) as { field?: string };
     const field = payload.field;
 
@@ -18,7 +18,7 @@ export async function PATCH(
 
     const supabase = getSupabaseAdmin();
     const { data, error } = await supabase.rpc("increment_post_metric", {
-      p_post_id: params.id,
+      p_post_id: id,
       p_metric: field,
     });
 
